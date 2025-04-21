@@ -1,0 +1,7 @@
+---
+# vars file for roles/monitor
+dns_name: 'https://beta-datanordeste.lsd.ufcg.edu.br' 
+ips_to_monitor: ['192.168.56.200'] # <ip_vm1>, <ip_vm2>, ...
+mail_app_user: 'oca.emails2024@gmail.com' 
+mail_app_pass: 'mail_app_password' # <password>
+mail_app_to: 'datane.ufcg@gmail.com' 

@@ -1,0 +1,51 @@
+---
+- name: Update apt cache
+  become: true
+  ansible.builtin.apt:
+    update_cache: yes
+    
+- name: Docker - install apt package dependencies
+  become: true
+  ansible.builtin.apt:
+    name:
+      - git
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - gnupg
+      - lsb-release
+      - software-properties-common
+      - python3-pip 
+    state: present
+
+- name: Docker - install docker.io and docker-compose-v2
+  become: true
+  ansible.builtin.apt:
+    name: 
+      - docker.io
+      - docker-compose-v2
+    update_cache: "yes"
+    
+- name: Docker - Create the docker group
+  become: true
+  ansible.builtin.group:
+    name: docker
+    state: present
+
+- name: Docker - Add users to the group
+  become: true
+  ansible.builtin.user:
+    name: "ubuntu"
+    groups: ["docker"]
+    append: "yes"
+
+- name: Install python packages for ansible management of docker and docker-compose
+  ansible.builtin.apt:
+    name:
+      - python3-docker
+      - python3-yaml
+    state: present
+
+- name: Reset ssh connection to allow user changes to affect ansible user
+  ansible.builtin.meta:
+    reset_connection

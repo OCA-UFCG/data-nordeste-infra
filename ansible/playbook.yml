@@ -1,0 +1,16 @@
+---
+- name: Data Nordeste Production
+  hosts: server
+  become: true
+  gather_facts: off
+  roles:
+    - { role: setup, tags: setup }
+    - { role: deploy, tags: deploy }
+
+- name: Data Nordeste Monitor
+  hosts: monitor
+  become: true
+  gather_facts: off
+  roles:
+    - { role: setup, tags: setup }
+    - { role: monitor, tags: monitor }

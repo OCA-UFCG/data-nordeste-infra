@@ -1,0 +1,6 @@
+---
+# vars file for roles/deploy
+container_port: 3000
+container_name: data-nordeste-frontend-beta-app
+docker_image: ocaufcg/data-nordeste-frontend-beta
+dns_name: 'https://beta-datanordeste.lsd.ufcg.edu.br'

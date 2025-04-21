@@ -1,0 +1,92 @@
+---
+# tasks file for role/deploy
+- name: Create a directory for the Nginx configuration
+  file:
+    path: ./nginx
+    state: directory
+
+- name: Create a directory for SSL certificates
+  file:
+    path: ./ssl
+    state: directory
+
+- name: Create the datane.conf file for Nginx
+  copy:
+    dest: ./nginx/datane.conf
+    content: |
+      server {
+          listen [::]:443 ssl ipv6only=on; 
+          listen 443 ssl; 
+
+          server_name {{ dns_name }};
+
+          ssl_certificate /etc/nginx/ssl/lsd.pem;  
+          ssl_certificate_key /etc/nginx/ssl/lsd.key;  
+          ssl_trusted_certificate /etc/nginx/ssl/lsd.crt;  
+
+          location / {
+            client_max_body_size 6G;
+            proxy_pass http://{{ container_name }}:3000;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection 'upgrade';
+            proxy_set_header Host $host;
+            proxy_cache_bypass $http_upgrade;
+          }
+      }
+
+      server {
+          listen 80;
+          listen [::]:80;
+          server_name {{ dns_name }};
+          server_tokens off;
+
+          location / {
+              return 301 https://$host$request_uri;
+          }
+      }
+
+- name: Copy SSL certificates
+  copy:
+    src: "../../../../certs/{{ item }}"
+    dest: ./ssl/
+  with_items:
+    - ssl.pem
+    - ssl.key
+    - ssl.crt
+
+- name: Create the docker-compose.yml file
+  template:
+    src: ./docker-compose.yml
+    dest: ./docker-compose.yml
+
+- name: Stop and remove existing container if it is running
+  docker_container:
+    name: "{{ container_name }}"
+    state: absent
+    force_kill: yes
+  ignore_errors: yes
+  vars:
+    ansible_docker_host: "unix://var/run/docker.sock"
+
+- name: Pull the data nordeste image
+  community.docker.docker_image:
+    name: "{{ docker_image }}:latest"
+    source: pull
+
+- name: Run Docker Compose up
+  become: True
+  shell:
+    cmd: "docker compose -f ./docker-compose.yml up -d"
+
+- name: Run the data nordeste container
+  community.docker.docker_container:
+    name: "{{ container_name }}"
+    image: "{{ docker_image }}:latest"
+    restart_policy: always
+    state: started
+    detach: true
+    ports:
+      - "{{ container_port }}:{{ container_port }}"
+    networks:
+      - name: datane-network

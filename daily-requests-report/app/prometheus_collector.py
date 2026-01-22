@@ -1,33 +1,56 @@
 import requests
 from datetime import datetime
-from config.settings import PROMETHEUS_URL, QUERY
+from config.settings import URLS, QUERY
 
 
 def collect_requests():
-    # Faz a requisição para a API do Prometheus
-    response = requests.get(
-        f"{PROMETHEUS_URL}/api/v1/query",
-        params={"query": QUERY}
-    )
+    reports = []
 
-    # Converte resposta para JSON
-    data = response.json()
+    for target in URLS:
+        name = target["name"]
+        url = target["url"]
 
-    # Pega o resultado da query
-    result = data["data"]["result"]
+        try:
+            response = requests.get(
+                f"{url}/api/v1/query",
+                params={"query": QUERY},
+                timeout=10
+            )
 
-    if not result:
-        return None
+            data = response.json()
+            result = data["data"]["result"]
 
-    # Extrai timestamp e valor
-    timestamp = float(result[0]["value"][0])
-    total_requests = int(result[0]["value"][1])
+            if not result:
+                reports.append({
+                    "name": name,
+                    "url": url,
+                    "error": "Sem resultados",
+                    "date": None,
+                    "total_requests": 0,
+                    "raw_data": data
+                })
+                continue
 
-    # Converte timestamp para data legível
-    date = datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M:%S")
+            timestamp = float(result[0]["value"][0])
+            total_requests = int(result[0]["value"][1])
+            date = datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M:%S")
 
-    return {
-        "date": date,
-        "total_requests": total_requests,
-        "raw_data": data
-    }
+            reports.append({
+                "name": name,
+                "url": url,
+                "date": date,
+                "total_requests": total_requests,
+                "raw_data": data
+            })
+
+        except Exception as e:
+            reports.append({
+                "name": name,
+                "url": url,
+                "error": str(e),
+                "date": None,
+                "total_requests": 0,
+                "raw_data": None
+            })
+
+    return reports

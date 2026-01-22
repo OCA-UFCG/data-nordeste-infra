@@ -4,22 +4,33 @@ from app.email_sender import send_email
 
 
 def main():
-    data = collect_requests()
+    reports = collect_requests()
 
-    if not data:
+    if not reports:
         print("Nenhum dado encontrado.")
         return
 
-    print("Data:", data["date"])
-    print("Total de requisições:", data["total_requests"])
+    print("\n RELATÓRIO DE REQUISIÇÕES\n")
 
-    # Salva o retorno completo em JSON
+    for r in reports:
+        header = f"{r['name']} ({r['url']})"
+        print(header)
+
+        if r.get("error"):
+            print(f"Erro: {r['error']}")
+        else:
+            print("Data:", r["date"])
+            print("Total de requisições:", r["total_requests"])
+
+        print("-" * 50)
+
+    # Salva relatório completo
     with open("total_requests.json", "w") as file:
-        json.dump(data["raw_data"], file, indent=2)
+        json.dump(reports, file, indent=2, ensure_ascii=False)
 
-    send_email(data)
-    print("E-mail enviado com sucesso.")
+    send_email(reports)
 
+    print("\n E-mail enviado com sucesso.\n")
 
 if __name__ == "__main__":
     main()

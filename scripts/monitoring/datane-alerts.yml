@@ -1,0 +1,104 @@
+# Alertas do Data Nordeste no Prometheus da VM de monitoramento (oca-monitor).
+#
+# Cada alerta leva três anotações que o Alertmanager usa no e-mail: titulo
+# (assunto enquanto dura), resolvido (assunto quando acaba) e descricao.
+groups:
+  - name: datane
+    rules:
+      # Com a coleta a cada minuto, `for: 1m` é a segunda falha seguida
+      # (~2 min fora até o e-mail): a troca de container de um deploy, que
+      # derruba o site por alguns segundos, não vira alerta.
+      - alert: DataneForaDoAr
+        expr: up{job="datane-site"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          titulo: fora do ar
+          resolvido: voltou ao ar
+          descricao: >-
+            O Data Nordeste ({{ $labels.ambiente }}, {{ $labels.instance }}) não
+            respondeu em /api/metrics. Se o site abre no navegador, o
+            METRICS_TOKEN do container e o da VM de monitoramento podem ter
+            ficado diferentes, ou o certificado de datanordeste-portal.com
+            desse servidor venceu.
+
+      # O site responde, mas uma dependência não. O teste do Contentful roda
+      # uma vez por hora e guarda a falha, então um 0 dele dura até 1 h.
+      # IMPORTANT: sem o rótulo error. Ele faz parte da identidade da série: se
+      # a falha alterna entre "timeout" e "HTTP 502", cada troca vira um alerta
+      # novo, o `for` recomeça e o e-mail nunca sai. O motivo vem da consulta
+      # na descrição.
+      - alert: DataneServicoComProblema
+        expr: max without (error) (datane_dependency_up) == 0
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          titulo: serviço com problema
+          resolvido: serviços normalizados
+          descricao: >-
+            O site ({{ $labels.ambiente }}) está no ar, mas
+            {{ $labels.dependency }} falhou{{ with printf "datane_dependency_up{dependency=%q,ambiente=%q}" $labels.dependency $labels.ambiente | query }}
+            ({{ . | first | label "error" }}){{ end }}. Contentful
+            fora costuma ser a cota mensal estourada (Organization settings →
+            Usage). O erro completo fica no log do container (docker logs),
+            nas linhas com metrics_check_failed.
+
+      # O site testa cada boletim a cada 15 min, então o valor só muda nesse
+      # ritmo: 30 min são duas ou três verificações seguidas com falha. Uma
+      # lentidão do gov.br que passa sozinha não vira e-mail. Sem o rótulo
+      # error, pelo mesmo motivo do DataneServicoComProblema.
+      - alert: DataneBoletimFora
+        expr: max without (error) (datane_boletim_up) == 0
+        for: 30m
+        labels:
+          severity: critical
+        annotations:
+          titulo: boletim não abre
+          resolvido: boletim voltou a abrir
+          descricao: >-
+            O boletim "{{ $labels.titulo }}" não abre no leitor de PDF
+            ({{ $labels.ambiente }}){{ with printf "datane_boletim_up{id=%q,ambiente=%q}" $labels.id $labels.ambiente | query }},
+            motivo {{ . | first | label "error" }}{{ end }}:
+            https://datanordeste.sudene.gov.br/boletim/{{ $labels.id }}.
+            host_not_allowed: o link no Contentful não é do gov.br nem do
+            Drive. not_a_pdf: o link do gov.br precisa terminar em
+            /@@display-file/file, ou o arquivo foi trocado por uma página.
+            HTTP 404: o arquivo saiu do gov.br. O link fica no campo "link"
+            do post no Contentful.
+
+      # Em 10/11/2026 o certificado do failover estava vencido desde
+      # 12/10/2025 sem ninguém saber. O DNS alterna entre os dois servidores,
+      # então cada sonda vê um deles; o menor valor da última hora cobre ambos.
+      - alert: DataneCertificadoVencendo
+        expr: >-
+          min_over_time(probe_ssl_earliest_cert_expiry{job="datane-certificado"}[1h])
+            - time() < 14 * 86400
+        for: 10m
+        annotations:
+          titulo: certificado HTTPS perto de vencer
+          resolvido: certificado HTTPS renovado
+          descricao: >-
+            O certificado de datanordeste-portal.com vence em
+            {{ $value | humanizeDuration }} em um dos servidores. Para ver
+            qual: echo | openssl s_client -connect <IP>:443 -servername
+            datanordeste-portal.com | openssl x509 -noout -enddate, com os IPs
+            3.219.77.227 (prod) e 18.205.78.40 (failover).
+
+      # O DataneForaDoAr olha cada servidor pelo IP; este olha o nome. Se
+      # todas as sondas da última 15 min falharam, o problema é o nome em si
+      # (DNS do Route 53, certificado nos dois servidores), e não um servidor.
+      - alert: DataneEnderecoFora
+        expr: max_over_time(probe_success{job="datane-certificado"}[15m]) == 0
+        # Logo depois do deploy, a janela de 15 min tem uma sonda só.
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          titulo: endereço do site não abre
+          resolvido: endereço do site voltou a abrir
+          descricao: >-
+            https://datanordeste-portal.com/health não abriu com HTTPS válido em
+            nenhuma sonda dos últimos 15 min. As causas comuns são o DNS do
+            Route 53 ou o certificado vencido nos dois servidores.

@@ -1,0 +1,54 @@
+# Rota, receptores e inibição do Data Nordeste no Alertmanager da VM de
+# monitoramento (oca-monitor). O Alertmanager só lê um arquivo, então o
+# merge_alertmanager.py junta este trecho ao alertmanager.yml de lá, que também
+# atende o SEDES, o Atlas e o OCA, sem mexer no resto.
+
+# Entra como uma rota filha: o que tem project="datane" para aqui.
+route:
+  matchers: ['project="datane"']
+  receiver: datane-email
+  group_by: [alertname, ambiente]
+  group_wait: 30s
+  group_interval: 5m
+  # Lembrete enquanto o problema durar.
+  repeat_interval: 3h
+  routes:
+    # As regras genéricas da VM (prometheus-alerts.yml) não têm titulo nem
+    # descricao, e o e-mail sairia vazio. Hoje só o ServiceDown (probe_success
+    # == 0) pega séries do datane, e o DataneEnderecoFora já o substitui; calar
+    # tudo que não é Datane* cobre também as regras genéricas que vierem depois.
+    - matchers: ['alertname!~"Datane.+"']
+      receiver: datane-silencio
+    # Um link quebrado no Contentful falha igual em prod e no failover: um
+    # e-mail com os dois, e não um por servidor. Corrigir conteúdo leva tempo,
+    # então o lembrete é diário.
+    - matchers: ['alertname="DataneBoletimFora"']
+      group_by: [alertname]
+      repeat_interval: 24h
+    - matchers: ['alertname="DataneCertificadoVencendo"']
+      repeat_interval: 24h
+
+# Com o servidor inteiro fora, as falhas de serviço e de boletim dele são
+# consequência, não notícia.
+inhibit_rules:
+  - source_matchers: ['alertname="DataneForaDoAr"']
+    target_matchers: ['alertname=~"DataneServicoComProblema|DataneBoletimFora"']
+    equal: [ambiente]
+
+receivers:
+  - name: datane-email
+    email_configs:
+      - to: datane.ufcg@gmail.com
+        send_resolved: true
+        headers:
+          Subject: '[Data Nordeste{{ with .CommonLabels.ambiente }} {{ . }}{{ end }}] {{ if eq .Status "firing" }}{{ .CommonAnnotations.titulo }}{{ else }}{{ .CommonAnnotations.resolvido }}{{ end }}'
+        html: ""
+        text: |-
+          {{ range .Alerts.Firing }}{{ .Annotations.descricao }}
+          Desde {{ (.StartsAt | tz "America/Sao_Paulo").Format "02/01 às 15:04" }} (horário de Brasília).
+
+          {{ end }}{{ range .Alerts.Resolved }}Resolvido depois de {{ (.EndsAt.Sub .StartsAt).Seconds | humanizeDuration }}, desde {{ (.StartsAt | tz "America/Sao_Paulo").Format "02/01 às 15:04" }} (horário de Brasília): {{ .Annotations.descricao }}
+
+          {{ end }}Quem verificou: a VM de monitoramento (oca-monitor).
+          Alertas ativos: http://34.200.5.32:9093
+  - name: datane-silencio

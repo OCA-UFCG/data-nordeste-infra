@@ -1,0 +1,51 @@
+# Coletas do Data Nordeste no Prometheus da VM de monitoramento (oca-monitor).
+# Entra pelo scrape_config_files do prometheus.yml; o deploy.sh copia este
+# arquivo para /home/ubuntu/prometheus/datane/.
+scrape_configs:
+  # O /api/metrics de cada servidor (frontend, PR #398). Se ele não responde, up
+  # fica 0 (site fora do ar). Em prod, ele traz também o estado do Contentful, do
+  # Zenodo e de cada boletim; no failover não, porque esses testes dariam o mesmo
+  # resultado (EXTERNAL_CHECKS=1 só em prod, no data-nordeste-frontend).
+  - job_name: datane-site
+    scheme: https
+    metrics_path: /api/metrics
+    scrape_interval: 1m
+    # O PDF do Drive leva ~8,5 s até o primeiro byte, e o site dá até 20 s a
+    # cada boletim (em paralelo).
+    scrape_timeout: 30s
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/datane/metrics-token
+    # Pelo IP, e não pelo nome: o DNS de datanordeste-portal.com sorteia entre os
+    # dois servidores, e o nginx de prod redireciona o nome para o domínio da
+    # SUDENE, cuja Cloudflare recusa a VM. Pelo IP não há redirect (testado em
+    # 13/11/2026), e cada alvo diz qual servidor caiu.
+    static_configs:
+      - targets: [3.219.77.227]
+        labels: { project: datane, ambiente: produção }
+      - targets: [18.205.78.40]
+        labels: { project: datane, ambiente: failover }
+    # Conecta no IP, mas confere o certificado de datanordeste-portal.com: um
+    # certificado vencido continua derrubando a coleta.
+    tls_config:
+      server_name: datanordeste-portal.com
+
+  # A validade do certificado HTTPS, pelo blackbox que já roda na VM. Substitui o
+  # job `datane` antigo, editado à mão na VM em 10–11/11/2026. O DNS alterna entre
+  # prod e failover, então cada sonda cai num deles; o alerta usa o menor valor da
+  # última hora para cobrir os dois.
+  - job_name: datane-certificado
+    metrics_path: /probe
+    scrape_interval: 5m
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets: [https://datanordeste-portal.com/health]
+        labels: { project: datane, ambiente: produção e failover }
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115

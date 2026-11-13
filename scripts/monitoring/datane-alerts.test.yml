@@ -1,0 +1,81 @@
+# Teste das regras com o promtool, sem precisar da VM:
+#   docker run --rm --entrypoint promtool -v "$PWD":/w -w /w prom/prometheus:latest \
+#     test rules datane-alerts.test.yml
+rule_files:
+  - datane-alerts.yml
+evaluation_interval: 1m
+
+tests:
+  # Um boletim quebrado de vez: só vira alerta depois de 30 min com 0.
+  - interval: 1m
+    input_series:
+      - series: 'datane_boletim_up{job="datane-site",ambiente="produção",id="2v9F6",titulo="Mulheres do Nordeste",error="host_not_allowed"}'
+        values: "0x45"
+    alert_rule_test:
+      - eval_time: 29m
+        alertname: DataneBoletimFora
+        exp_alerts: []
+      - eval_time: 31m
+        alertname: DataneBoletimFora
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              job: datane-site
+              ambiente: produção
+              id: 2v9F6
+              titulo: Mulheres do Nordeste
+            exp_annotations:
+              titulo: boletim não abre
+              resolvido: boletim voltou a abrir
+              descricao: >-
+                O boletim "Mulheres do Nordeste" não abre no leitor de PDF
+                (produção), motivo host_not_allowed:
+                https://datanordeste.sudene.gov.br/boletim/2v9F6.
+                host_not_allowed: o link no Contentful não é do gov.br nem do
+                Drive. not_a_pdf: o link do gov.br precisa terminar em
+                /@@display-file/file, ou o arquivo foi trocado por uma página.
+                HTTP 404: o arquivo saiu do gov.br. O link fica no campo "link"
+                do post no Contentful.
+
+  # Uma lentidão do gov.br que dura uma verificação (15 min) e passa sozinha:
+  # nenhum e-mail.
+  - interval: 1m
+    input_series:
+      - series: 'datane_boletim_up{job="datane-site",ambiente="produção",id="7tbx",titulo="Desertificação",error="timeout"}'
+        values: "0x15 1x30"
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: DataneBoletimFora
+        exp_alerts: []
+
+  # O gov.br alterna o motivo da falha a cada verificação de 15 min. Com o
+  # rótulo error na identidade do alerta, cada troca recomeçava o `for` e o
+  # e-mail nunca saía.
+  - interval: 1m
+    input_series:
+      - series: 'datane_boletim_up{job="datane-site",ambiente="produção",id="7tbx",titulo="Desertificação",error="timeout"}'
+        values: "0x14 stale _x13 0x14 stale _x13 0x14"
+      - series: 'datane_boletim_up{job="datane-site",ambiente="produção",id="7tbx",titulo="Desertificação",error="HTTP 503"}'
+        values: "_x14 0x14 stale _x13 0x14 stale"
+    alert_rule_test:
+      - eval_time: 40m
+        alertname: DataneBoletimFora
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              job: datane-site
+              ambiente: produção
+              id: 7tbx
+              titulo: Desertificação
+            exp_annotations:
+              titulo: boletim não abre
+              resolvido: boletim voltou a abrir
+              descricao: >-
+                O boletim "Desertificação" não abre no leitor de PDF
+                (produção), motivo timeout:
+                https://datanordeste.sudene.gov.br/boletim/7tbx.
+                host_not_allowed: o link no Contentful não é do gov.br nem do
+                Drive. not_a_pdf: o link do gov.br precisa terminar em
+                /@@display-file/file, ou o arquivo foi trocado por uma página.
+                HTTP 404: o arquivo saiu do gov.br. O link fica no campo "link"
+                do post no Contentful.

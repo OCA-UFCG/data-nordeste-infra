@@ -23,8 +23,9 @@ groups:
             ficado diferentes, ou o certificado de datanordeste-portal.com
             desse servidor venceu.
 
-      # O site responde, mas uma dependência não. O teste do Contentful roda
-      # uma vez por hora e guarda a falha, então um 0 dele dura até 1 h.
+      # O site responde, mas uma dependência não. Só prod publica estes números.
+      # O teste do Contentful roda uma vez por hora e guarda a falha, então um 0
+      # dele dura até 1 h.
       # IMPORTANT: sem o rótulo error. Ele faz parte da identidade da série: se
       # a falha alterna entre "timeout" e "HTTP 502", cada troca vira um alerta
       # novo, o `for` recomeça e o e-mail nunca sai. O motivo vem da consulta

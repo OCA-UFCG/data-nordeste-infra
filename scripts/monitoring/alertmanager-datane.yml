@@ -19,11 +19,9 @@ route:
     # tudo que não é Datane* cobre também as regras genéricas que vierem depois.
     - matchers: ['alertname!~"Datane.+"']
       receiver: datane-silencio
-    # Um link quebrado no Contentful falha igual em prod e no failover: um
-    # e-mail com os dois, e não um por servidor. Corrigir conteúdo leva tempo,
-    # então o lembrete é diário.
+    # Corrigir um link no Contentful leva tempo, então o lembrete é diário. Só
+    # prod testa os boletins, e os quebrados chegam juntos num e-mail.
     - matchers: ['alertname="DataneBoletimFora"']
-      group_by: [alertname]
       repeat_interval: 24h
     - matchers: ['alertname="DataneCertificadoVencendo"']
       repeat_interval: 24h

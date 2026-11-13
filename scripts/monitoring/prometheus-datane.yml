@@ -3,8 +3,9 @@
 # arquivo para /home/ubuntu/prometheus/datane/.
 scrape_configs:
   # O /api/metrics de cada servidor (frontend, PR #398). Se ele não responde, up
-  # fica 0 (site fora do ar); se responde, traz o estado do Contentful, do Zenodo
-  # e de cada boletim.
+  # fica 0 (site fora do ar). Em prod, ele traz também o estado do Contentful, do
+  # Zenodo e de cada boletim; no failover não, porque esses testes dariam o mesmo
+  # resultado (EXTERNAL_CHECKS=1 só em prod, no data-nordeste-frontend).
   - job_name: datane-site
     scheme: https
     metrics_path: /api/metrics

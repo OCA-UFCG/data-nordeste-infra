@@ -44,3 +44,67 @@
   become: True
   shell:
     cmd: "docker compose -f ./docker-compose.yml up -d"
+
+# O Data Nordeste: a mesma camada que o deploy.sh instala na VM compartilhada. Roda
+# se há token (primeira vez) ou se a VM já tem o Data Nordeste; sem isto, rodar o
+# role numa VM que já o tem apagaria o que o instalador pôs.
+- name: Check whether the Datane monitoring is already installed
+  stat:
+    path: "{{ monitor_home }}/prometheus/datane/metrics-token"
+  register: datane_token_file
+
+- name: Install the Datane monitoring layer
+  when: metrics_token | length > 0 or datane_token_file.stat.exists
+  block:
+    - name: Check that the base files landed in monitor_home
+      stat:
+        path: "{{ monitor_home }}/docker-compose.yml"
+      register: base_compose
+
+    - name: Stop when monitor_home is not where the base files landed
+      fail:
+        msg: "{{ monitor_home }}/docker-compose.yml não existe; ajuste monitor_home em vars/main.yml."
+      when: not base_compose.stat.exists
+
+    - name: Create the staging directory for the Datane files
+      file:
+        path: /tmp/datane-monitoring
+        state: directory
+        mode: "0700"
+
+    - name: Copy the Datane monitoring files
+      copy:
+        src: "{{ playbook_dir }}/../scripts/monitoring/{{ item }}"
+        dest: "/tmp/datane-monitoring/{{ item }}"
+        mode: "0644"
+      loop:
+        - prometheus-datane.yml
+        - datane-alerts.yml
+        - alertmanager-datane.yml
+        - blackbox-datane.yml
+        - merge_alertmanager.py
+        - merge_blackbox_module.py
+        - remove_scrape_job.py
+        - ensure_prometheus_entries.py
+        - install-on-monitor.sh
+
+    # O token vai pela variável de ambiente, e não como argumento do módulo, para
+    # não aparecer na saída de uma falha. Numa VM montada agora, o alertmanager.yml
+    # é o do template (sem comentários de outros times), então perder comentários
+    # não custa nada.
+    - name: Run the Datane installer
+      become: true
+      shell: printf '%s' "$METRICS_TOKEN" | bash /tmp/datane-monitoring/install-on-monitor.sh
+      args:
+        executable: /bin/bash
+      environment:
+        METRICS_TOKEN: "{{ metrics_token }}"
+        MONITOR_HOME: "{{ monitor_home }}"
+        ALERTMANAGER_ALLOW_COMMENT_LOSS: "1"
+        SKIP_METRICS_TOKEN_CHECK: "{{ '1' if datane_skip_token_check else '' }}"
+      changed_when: true
+
+    - name: Remove the staging directory
+      file:
+        path: /tmp/datane-monitoring
+        state: absent

@@ -5,3 +5,11 @@ ips_to_monitor: ['192.168.56.200'] # <ip_vm1>, <ip_vm2>, ...
 mail_app_user: 'oca.emails2024@gmail.com' 
 mail_app_pass: 'mail_app_password' # <password>
 mail_app_to: 'datane.ufcg@gmail.com' 
+
+# O Data Nordeste na VM (scripts/monitoring). Depois de montar a base, o role roda
+# o mesmo instalador do deploy.sh; por isso rodar o role de novo não desfaz o Data
+# Nordeste. Só serve para uma VM montada do zero: a oca-monitor compartilhada com o
+# SEDES e o Atlas leva o deploy.sh, porque o role não conhece o que eles puseram lá.
+monitor_home: "/home/{{ ansible_user }}"
+metrics_token: '' # o mesmo valor do secret METRICS_TOKEN_PROD; passe com -e ou ansible-vault
+datane_skip_token_check: false # true só onde os servidores de prod não respondem (Vagrant)

@@ -15,7 +15,8 @@
 # para não aparecer na lista de processos.
 #
 # A VM é compartilhada com o SEDES, o Atlas e o OCA. Isto só acrescenta: um
-# diretório datane/ ao Prometheus e uma rota project="datane" ao Alertmanager.
+# diretório datane/ ao Prometheus, uma rota project="datane" ao Alertmanager e um
+# módulo ao blackbox.
 # A única coisa que tira é o job `datane` antigo, que este substitui.
 set -euo pipefail
 
@@ -23,7 +24,10 @@ TARGET="${1:?Informe o destino SSH, ex.: ubuntu@34.200.5.32}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
 ssh "$TARGET" 'rm -rf /tmp/datane-monitoring && mkdir -m 700 /tmp/datane-monitoring'
-scp -q "$HERE"/{prometheus-datane.yml,datane-alerts.yml,alertmanager-datane.yml,merge_alertmanager.py,remove_scrape_job.py,install-on-monitor.sh} \
+scp -q "$HERE"/{prometheus-datane.yml,datane-alerts.yml,alertmanager-datane.yml,blackbox-datane.yml,merge_alertmanager.py,merge_blackbox_module.py,remove_scrape_job.py,ensure_prometheus_entries.py,install-on-monitor.sh} \
   "$TARGET":/tmp/datane-monitoring/
+# O sudo descarta o ambiente: o que o instalador lê vai na própria linha do comando.
+remote_env="$(printf 'BLACKBOX_YML=%q ALERTMANAGER_ALLOW_COMMENT_LOSS=%q SKIP_METRICS_TOKEN_CHECK=%q' \
+  "${BLACKBOX_YML:-}" "${ALERTMANAGER_ALLOW_COMMENT_LOSS:-}" "${SKIP_METRICS_TOKEN_CHECK:-}")"
 printf '%s' "${METRICS_TOKEN:-}" |
-  ssh "$TARGET" 'sudo bash /tmp/datane-monitoring/install-on-monitor.sh; status=$?; rm -rf /tmp/datane-monitoring; exit $status'
+  ssh "$TARGET" "sudo env $remote_env bash /tmp/datane-monitoring/install-on-monitor.sh; status=\$?; rm -rf /tmp/datane-monitoring; exit \$status"

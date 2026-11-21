@@ -11,8 +11,9 @@ scrape_configs:
     metrics_path: /api/metrics
     scrape_interval: 1m
     # O PDF do Drive leva ~8,5 s até o primeiro byte, e o site dá até 20 s a
-    # cada boletim, 10 por vez: 18 boletins são 2 levas, 40 s no pior caso (o
-    # gov.br fora). 55 s é o máximo com coleta a cada minuto.
+    # cada boletim, 10 por vez, depois da lista (até 8 s): 18 boletins são 2 levas,
+    # 8 + 2 × 20 = 48 s no pior caso (o gov.br fora). 55 s é o máximo com coleta a
+    # cada minuto; passando de 20 boletins o pior caso estoura.
     scrape_timeout: 55s
     authorization:
       type: Bearer

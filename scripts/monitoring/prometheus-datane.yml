@@ -11,8 +11,9 @@ scrape_configs:
     metrics_path: /api/metrics
     scrape_interval: 1m
     # O PDF do Drive leva ~8,5 s até o primeiro byte, e o site dá até 20 s a
-    # cada boletim (em paralelo).
-    scrape_timeout: 30s
+    # cada boletim, 10 por vez: 18 boletins são 2 levas, 40 s no pior caso (o
+    # gov.br fora). 55 s é o máximo com coleta a cada minuto.
+    scrape_timeout: 55s
     authorization:
       type: Bearer
       credentials_file: /etc/prometheus/datane/metrics-token
@@ -34,11 +35,14 @@ scrape_configs:
   # job `datane` antigo, editado à mão na VM em 10–11/11/2026. O DNS alterna entre
   # prod e failover, então cada sonda cai num deles; o alerta usa o menor valor da
   # última hora para cobrir os dois.
+  # IMPORTANT: módulo próprio (blackbox-datane.yml), que não confere o certificado.
+  # No http_2xx, um certificado vencido derruba a sonda antes de a validade ser
+  # medida, e a métrica some justo quando o alerta mais precisa dela.
   - job_name: datane-certificado
     metrics_path: /probe
     scrape_interval: 5m
     params:
-      module: [http_2xx]
+      module: [datane_certificado]
     static_configs:
       - targets: [https://datanordeste-portal.com/health]
         labels: { project: datane, ambiente: produção e failover }

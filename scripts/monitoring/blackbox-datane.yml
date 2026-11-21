@@ -1,0 +1,21 @@
+# Módulo do blackbox para o job datane-certificado (prometheus-datane.yml). Entra
+# no blackbox-config.yml da VM pelo deploy.sh (merge_blackbox_module.py).
+#
+# IMPORTANT: não confere a cadeia nem a validade do certificado. Com o certificado
+# vencido, o http_2xx falha o handshake e o blackbox não emite
+# probe_ssl_earliest_cert_expiry: o alerta de validade ficaria cego, e "resolveria",
+# justo quando o certificado venceu. Quem confere o certificado é a coleta por IP
+# do /api/metrics (job datane-site).
+#
+# Também não segue redirect: se o nginx de prod redirecionar o /health para o
+# domínio da SUDENE (cuja Cloudflare recusa a VM), a sonda mediria o certificado
+# de lá e falharia. Uma resposta 3xx conta como "abre".
+modules:
+  datane_certificado:
+    prober: http
+    timeout: 5s
+    http:
+      follow_redirects: false
+      valid_status_codes: [200, 301, 302, 303, 307, 308]
+      tls_config:
+        insecure_skip_verify: true
